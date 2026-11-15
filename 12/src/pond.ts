@@ -1,6 +1,7 @@
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { modelKoi } from './koi';
 import './pond.css';
 
 const canvas = document.querySelector('canvas')!;
@@ -146,80 +147,10 @@ for(const [cx,cz] of [[-4,-2.4],[3.9,2.8],[-3.6,3.8],[4.8,-3.3]]){
 }
 
 function createKoi(index:number){
-const fish=new T.Group(); scene.add(fish);
-const size=.69+random()*.34;fish.scale.set(size,size*(.85+random()*.25),size*(.82+random()*.35));
-const skin=new T.BufferGeometry(), pos:number[]=[], indices:number[]=[], uv:number[]=[];
-const rings=46, sides=36;
-for(let i=0;i<=rings;i++){
-  const u=i/rings, x=-1.12+2.28*u;
-  const profile=Math.pow(Math.sin(Math.PI*u),.59)*(.37+.82*u);
-  for(let j=0;j<=sides;j++){
-    const a=j/sides*Math.PI*2;
-    pos.push(x,Math.cos(a)*profile*.49,Math.sin(a)*profile*.56);
-    uv.push(u,j/sides);
-    if(i<rings&&j<sides){const n=i*(sides+1)+j; indices.push(n,n+1,n+sides+1,n+1,n+sides+2,n+sides+1);}
-  }
-}
-skin.setAttribute('position',new T.Float32BufferAttribute(pos,3));
-skin.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); skin.setIndex(indices); skin.computeVertexNormals();
-const paint=document.createElement('canvas'); paint.width=1024; paint.height=512;
-const ctx=paint.getContext('2d')!;
-const base=['#eadfc9','#ebe1c9','#e4ad49','#e4dbcc','#b1a393'][index];
-ctx.fillStyle=base;ctx.fillRect(0,0,1024,512);
-const bands=index===2?2:4+Math.floor(random()*4);
-for(let patch=0;patch<bands;patch++){
-  const x=135+(patch+random()*.6)*745/bands, y=(random()-.5)*205;
-  const rx=40+random()*89, ry=47+random()*123;
-  const ink=index===2?'#e6c46f':index===4?'#31393a':index%2 && patch%3===1?'#242b29':random()>.4?'#bc4427':'#d55d2d';
-  const phase=random()*6;
-  for(const offset of [-512,0,512]){
-    ctx.fillStyle=ink;ctx.beginPath();
-    for(let n=0;n<90;n++){
-      const a=n/90*Math.PI*2,r=1+.17*Math.sin(a*3+phase)+.095*Math.sin(a*5-phase);
-      ctx.lineTo(x+Math.cos(a)*rx*r,y+offset+Math.sin(a)*ry*r);
-    }
-    ctx.closePath();ctx.fill();
-  }
-}
-ctx.strokeStyle='rgba(87,58,33,.18)';ctx.lineWidth=1.4;
-for(let row=0;row<48;row++)for(let col=4;col<47;col++){
-  ctx.beginPath();ctx.ellipse(col*18+(row%2)*9,row*11,10,6,0,-Math.PI/2,Math.PI/2);ctx.stroke();
-}
-const map=new T.CanvasTexture(paint);map.colorSpace=T.SRGBColorSpace;
-const body=new T.Mesh(skin,new T.MeshStandardMaterial({map,roughness:.38,side:T.DoubleSide}));fish.add(body);
-
-// All parts use the same body-space travelling wave, including the tail root.
-const moving:T.BufferGeometry[]=[skin];
-function fin(outline:number[][], shade:number){
-  const g=new T.BufferGeometry(), verts=outline.flat(), faces:number[]=[];
-  for(let i=1;i<outline.length-1;i++)faces.push(0,i,i+1);
-  g.setAttribute('position',new T.Float32BufferAttribute(verts,3));g.setIndex(faces);g.computeVertexNormals();
-  fish.add(new T.Mesh(g,new T.MeshStandardMaterial({color:shade,side:T.DoubleSide,transparent:true,opacity:.83})));moving.push(g);
-}
-for(const sign of [-1,1]){
-  fin([[-.96,0,0],[-1.57,.38*sign,.04],[-1.47,.18*sign,.04],[-1.34,0,.02]],0xde9a68);
-  // A rounded pectoral fan with a scalloped edge and translucent fin rays.
-  const root=new T.Vector3(.43,-.04,.32*sign);
-  const vertices=[root.x,root.y,root.z], colors=[.79,.65,.43], triangles:number[]=[];
-  for(let ray=0;ray<=32;ray++){
-    const t=ray/32, a=-.12+1.76*t, length=.24+.32*Math.sin(Math.PI*t)**.64+.014*Math.cos(ray*Math.PI/2);
-    vertices.push(root.x-length*Math.sin(a),root.y-.09*Math.sin(t*Math.PI),root.z+sign*length*Math.cos(a));
-    const glow=ray%3===0?.88:.66;
-    colors.push(glow,glow*.86,glow*.68);
-    if(ray>0) triangles.push(0,ray,ray+1);
-  }
-  const fan=new T.BufferGeometry();
-  fan.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
-  fan.setAttribute('color',new T.Float32BufferAttribute(colors,3));fan.setIndex(triangles);fan.computeVertexNormals();
-  fish.add(new T.Mesh(fan,new T.MeshStandardMaterial({vertexColors:true,transparent:true,opacity:.69,side:T.DoubleSide,depthWrite:false})));
-  moving.push(fan);
-  const whisker=new T.QuadraticBezierCurve3(new T.Vector3(1.07,-.035,.095*sign),new T.Vector3(1.14,-.07,.16*sign),new T.Vector3(1.09,-.14,.21*sign));
-  fish.add(new T.Mesh(new T.TubeGeometry(whisker,9,.011,5,false),new T.MeshStandardMaterial({color:0xc2a082})));
-  const eye=new T.Mesh(new T.SphereGeometry(.054,16,12),new T.MeshStandardMaterial({color:0x171c16,roughness:.22}));
-  eye.position.set(.88,.12,.27*sign);fish.add(eye);
-}
-fin([[.45,.30,0],[.08,.57,0],[-.24,.45,0],[-.63,.22,0]],0xd4ac80);
-const rest=moving.map(g=>Float32Array.from(g.getAttribute('position').array));
+const {fish,moving,rest}=modelKoi(index,random,clockUniform);
+scene.add(fish);
+const size=.74+random()*.28;
+fish.scale.set(size,size*(.92+random()*.14),size*(.9+random()*.21));
 const shadowCanvas=document.createElement('canvas');shadowCanvas.width=shadowCanvas.height=128;
 const sc=shadowCanvas.getContext('2d')!, gradient=sc.createRadialGradient(64,64,0,64,64,64);
 gradient.addColorStop(0,'rgba(0,20,16,.48)');gradient.addColorStop(1,'rgba(0,20,16,0)');
@@ -284,15 +215,18 @@ renderer.setAnimationLoop(now=>{
   const dx=waypoint.x-fish.position.x,dz=waypoint.z-fish.position.z,dist=Math.hypot(dx,dz);
   const diff=Math.atan2(Math.sin(Math.atan2(dz,dx)-heading),Math.cos(Math.atan2(dz,dx)-heading));
   if(dist>.12)heading+=T.MathUtils.clamp(diff,-1.45*dt,1.45*dt);
-  const speed=Math.min(attention>0?1.7:1.12,dist*1.7);
+  const effort=.65+.35*Math.sin(elapsed*1.8+route);
+  const speed=Math.min(attention>0?1.65:.76+.45*effort,dist*1.7);
   fish.position.x+=Math.cos(heading)*speed*dt;fish.position.z+=Math.sin(heading)*speed*dt;
-  fish.position.y=koi.depth+.05*Math.sin(elapsed*1.4+route);fish.rotation.y=-heading;
-  phase+=dt*(2+tempo*4+speed*1.9);
+  fish.position.y=koi.depth+.05*Math.sin(elapsed*1.4+route);fish.rotation.y=-heading;fish.rotation.x=.085*Math.sin(diff)*speed;
+  phase+=dt*(1.7+effort*1.4+speed*1.9);
   moving.forEach((g,k)=>{
     const p=g.getAttribute('position'),base=rest[k];
     for(let i=0;i<p.count;i++){
       const x=base[i*3],weight=Math.max(0,(.86-x)/2.35);
-      p.setZ(i,base[i*3+2]+weight*weight*.48*Math.sin(phase+x*2.15));
+      const z=base[i*3+2];
+      p.setZ(i,z+weight*weight*((.30+.25*effort)*Math.sin(phase+x*2.15)+.24*Math.sin(diff)));
+      if(g.userData.paired)p.setY(i,base[i*3+1]+Math.max(0,Math.abs(z)-.26)*.21*Math.sin(phase*.68+Math.sign(z)*.4));
     }
     p.needsUpdate=true;
   });
