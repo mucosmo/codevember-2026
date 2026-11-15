@@ -2,6 +2,7 @@ import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { modelKoi } from './koi';
+import { plantLotuses } from './lotus';
 import './pond.css';
 
 const canvas = document.querySelector('canvas')!;
@@ -145,6 +146,8 @@ for(const [cx,cz] of [[-4,-2.4],[3.9,2.8],[-3.6,3.8],[4.8,-3.3]]){
     scene.add(leaf);
   }
 }
+
+plantLotuses(scene,random);
 
 function createKoi(index:number){
 const {fish,moving,rest}=modelKoi(index,random,clockUniform);
