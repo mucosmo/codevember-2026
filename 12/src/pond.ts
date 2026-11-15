@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import './pond.css';
 
 const canvas = document.querySelector('canvas')!;
@@ -15,7 +16,7 @@ const sun = new T.DirectionalLight(0xffeed0, 2.1);
 sun.position.set(-4, 8, 2);
 scene.add(sun);
 
-let seed = 73819;
+let seed = crypto.getRandomValues(new Uint32Array(1))[0];
 const random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296);
 const clockUniform = {value:0};
 const bed = new T.Mesh(new T.PlaneGeometry(100,100), new T.ShaderMaterial({
@@ -65,43 +66,48 @@ for (let y = 0; y < 384; y++) for (let x = 0; x < 384; x++) {
 stonePaint.putImageData(pixels,0,0);
 const minerals = new T.CanvasTexture(stonePaint.canvas);
 minerals.colorSpace = T.SRGBColorSpace;
-const rockMaterial = new T.MeshStandardMaterial({map:minerals,bumpMap:minerals,bumpScale:.003,roughness:.58});
-const dummy = new T.Object3D();
-for (let variant=0; variant<4; variant++) {
-  const shape = new T.SphereGeometry(1,32,20);
-  const points = shape.attributes.position;
-  for (let i=0;i<points.count;i++) {
-    const x=points.getX(i), y=points.getY(i), z=points.getZ(i);
-    const r=1+.09*Math.sin(3*x+variant)*Math.cos(2*z-y)+.045*Math.sin(5*z+2*y+variant);
-    points.setXYZ(i,x*r+.07*y*y,y*r,z*r);
+const pebbles:T.BufferGeometry[]=[];
+minerals.wrapS=minerals.wrapT=T.RepeatWrapping;
+for(let i=0;i<380;i++){
+  const shape=new T.SphereGeometry(1,18,12);
+  const pos=shape.attributes.position, uv=shape.attributes.uv, colors=[];
+  const phase=random()*6, twist=random()*5, drift=random()*.28, flat=.25+random()*.7;
+  const size=.04+random()**2.4*.32, stretch=.78+random()*1.1;
+  const stoneColor=new T.Color().setHSL(.07+random()*.16,.035+random()*.23,.18+random()*.36);
+  const offset=random(), frequency=.55+random()*2;
+  for(let n=0;n<pos.count;n++){
+    const x=pos.getX(n),y=pos.getY(n),z=pos.getZ(n);
+    const grain=Math.sin(3*x+phase)*Math.cos(2*z-y+twist);
+    const r=1+.15*grain+.055*Math.sin(5*z+2*y+phase);
+    pos.setXYZ(n,x*r+drift*y*y,y*r,z*r+.07*x*y);
+    uv.setXY(n,offset+uv.getX(n)*frequency,phase+uv.getY(n)*frequency);
+    const tint=.88+.12*grain+.12*y;
+    colors.push(stoneColor.r*tint,stoneColor.g*tint,stoneColor.b*tint);
   }
-  shape.computeVertexNormals();
-  const rocks = new T.InstancedMesh(shape,rockMaterial,110);
-  for(let i=0;i<rocks.count;i++){
-    const size=.045+random()**3*.38;
-    dummy.position.set((random()-.5)*23,-1.11+size*.13,(random()-.5)*16);
-    dummy.scale.set(size*(1.1+random()*.7),size*(.45+random()*.35),size);
-    dummy.rotation.set(random()*.3,random()*6,random()*.2);
-    dummy.updateMatrix(); rocks.setMatrixAt(i,dummy.matrix);
-    rocks.setColorAt(i,new T.Color().setHSL(.09+random()*.10,.09+random()*.15,.30+random()*.29));
-  }
-  scene.add(rocks);
+  shape.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+  shape.computeVertexNormals();shape.scale(size*stretch,size*flat,size);
+  shape.rotateY(random()*6);shape.translate((random()-.5)*22,-1.10,(random()-.5)*15);
+  pebbles.push(shape);
 }
+scene.add(new T.Mesh(mergeGeometries(pebbles),new T.MeshStandardMaterial({
+  vertexColors:true,map:minerals,bumpMap:minerals,bumpScale:.003,roughness:.55
+})));
 
 // Paint branching veins in the same radial coordinates as the folded blade.
+function leafMaterial(age:number, veins:number, bend:number){
 const blade = textureCanvas(512);
 const green = blade.createRadialGradient(256,256,0,256,256,252);
 green.addColorStop(0,'#809653');green.addColorStop(.25,'#557848');
-green.addColorStop(.84,'#416c46');green.addColorStop(1,'#849052');
+green.addColorStop(.84,age>.7?'#86864a':age<.3?'#679155':'#416c46');green.addColorStop(1,age>.7?'#ab8348':'#849052');
 blade.fillStyle=green;blade.fillRect(0,0,512,512);
 for(let i=0;i<22000;i++){
   blade.fillStyle=random()>.5?'rgba(220,207,137,.095)':'rgba(35,65,33,.09)';
   blade.fillRect(random()*512,random()*512,1+random()*3,1+random()*2);
 }
-for(let i=0;i<18;i++){
-  blade.save();blade.translate(256,256);blade.rotate(i*Math.PI/9);
+for(let i=0;i<veins;i++){
+  blade.save();blade.translate(256,256);blade.rotate(i*Math.PI*2/veins);
   blade.strokeStyle='rgba(170,186,109,.52)';blade.lineWidth=1.8;
-  blade.beginPath();blade.moveTo(0,0);blade.quadraticCurveTo(136,7,246,0);blade.stroke();
+  blade.beginPath();blade.moveTo(0,0);blade.quadraticCurveTo(136,bend,246,0);blade.stroke();
   for(let j=1;j<11;j++) for(const side of [-1,1]){
     const x=j*21;blade.strokeStyle='rgba(159,178,111,.32)';blade.lineWidth=.9;
     blade.beginPath();blade.moveTo(x,3);blade.quadraticCurveTo(x+13,side*x*.07,x+24,side*x*.16);blade.stroke();
@@ -109,17 +115,22 @@ for(let i=0;i<18;i++){
   blade.restore();
 }
 const leafMap=new T.CanvasTexture(blade.canvas);leafMap.colorSpace=T.SRGBColorSpace;
-const leaves=new T.MeshStandardMaterial({map:leafMap,bumpMap:leafMap,bumpScale:.012,roughness:.42,side:T.DoubleSide});
+return new T.MeshStandardMaterial({map:leafMap,bumpMap:leafMap,bumpScale:.012,roughness:.42,side:T.DoubleSide});
+}
 for(const [cx,cz] of [[-4,-2.4],[3.9,2.8],[-3.6,3.8],[4.8,-3.3]]){
-  for(let j=0;j<5;j++){
-    const r=.34+random()*.41, phase=random()*6;
+  const count=3+Math.floor(random()*4), rotation=random()*6;
+  for(let j=0;j<count;j++){
+    const age=random(),r=.24+age*.52+random()*.12,phase=random()*6;
+    const waves=3+Math.floor(random()*6), cup=.04+(1-age)**2*.65;
+    const split=age>.77?.08+random()*.22:0, aspect=.74+random()*.32;
+    const leaves=leafMaterial(age,10+Math.floor(random()*11),random()*28-14);
     const vertices:number[]=[], coords:number[]=[], faces:number[]=[];
     for(let k=0;k<=12;k++) for(let m=0;m<=80;m++){
-      const t=k/12, a=m/80*Math.PI*2;
-      const rim=1+.038*Math.sin(5*a+phase)+.023*Math.sin(9*a-phase);
+      const t=k/12, a=split+m/80*(Math.PI*2-2*split);
+      const rim=1+.065*Math.sin(waves*a+phase)+.023*Math.sin(9*a-phase);
       const x=Math.cos(a)*t*rim, z=Math.sin(a)*t*rim;
-      const h=.12*t*t+.044*t*Math.cos(9*a+phase)+.12*t**5*Math.sin(4*a+phase);
-      vertices.push(x*r,h*r,z*r*.94);coords.push(.5+.46*x,.5-.46*z);
+      const h=cup*t*t+.044*t*Math.cos(9*a+phase)+.12*t**5*Math.sin(4*a+phase);
+      vertices.push(x*r,h*r,z*r*aspect);coords.push(.5+.46*x,.5-.46*z);
       if(k<12 && m<80){const n=k*81+m;faces.push(n,n+1,n+81,n+1,n+82,n+81);}
     }
     const geometry=new T.BufferGeometry();
@@ -127,16 +138,18 @@ for(const [cx,cz] of [[-4,-2.4],[3.9,2.8],[-3.6,3.8],[4.8,-3.3]]){
     geometry.setAttribute('uv',new T.Float32BufferAttribute(coords,2));
     geometry.setIndex(faces);geometry.computeVertexNormals();
     const leaf=new T.Mesh(geometry,leaves);
-    const angle=j*2.4;
+    const angle=rotation+j*2.4+random()*.45;
     leaf.position.set(cx+Math.cos(angle)*.54*Math.sqrt(j),.47+j*.015,cz+Math.sin(angle)*.54*Math.sqrt(j));
     leaf.rotation.set(.07*Math.sin(phase),phase,.08*Math.cos(phase));
     scene.add(leaf);
   }
 }
 
+function createKoi(index:number){
 const fish=new T.Group(); scene.add(fish);
+const size=.69+random()*.34;fish.scale.set(size,size*(.85+random()*.25),size*(.82+random()*.35));
 const skin=new T.BufferGeometry(), pos:number[]=[], indices:number[]=[], uv:number[]=[];
-const rings=62, sides=44;
+const rings=46, sides=36;
 for(let i=0;i<=rings;i++){
   const u=i/rings, x=-1.12+2.28*u;
   const profile=Math.pow(Math.sin(Math.PI*u),.59)*(.37+.82*u);
@@ -151,12 +164,20 @@ skin.setAttribute('position',new T.Float32BufferAttribute(pos,3));
 skin.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); skin.setIndex(indices); skin.computeVertexNormals();
 const paint=document.createElement('canvas'); paint.width=1024; paint.height=512;
 const ctx=paint.getContext('2d')!;
-ctx.fillStyle='#efe5cb'; ctx.fillRect(0,0,1024,512);
-for(const [x,y,rx,ry] of [[820,0,84,98],[615,12,100,145],[405,-38,85,117],[240,48,77,111],[98,-23,48,80]]){
-  const edges=Array.from({length:32},(_,i)=>1+.12*Math.sin(i*.65)+random()*.13);
-  for(const offset of [0,512]){
-    ctx.fillStyle='#c84726';ctx.beginPath();
-    edges.forEach((v,i)=>{const a=i/32*Math.PI*2;ctx.lineTo(x+Math.cos(a)*rx*v,y+offset+Math.sin(a)*ry*v);});
+const base=['#eadfc9','#ebe1c9','#e4ad49','#e4dbcc','#b1a393'][index];
+ctx.fillStyle=base;ctx.fillRect(0,0,1024,512);
+const bands=index===2?2:4+Math.floor(random()*4);
+for(let patch=0;patch<bands;patch++){
+  const x=135+(patch+random()*.6)*745/bands, y=(random()-.5)*205;
+  const rx=40+random()*89, ry=47+random()*123;
+  const ink=index===2?'#e6c46f':index===4?'#31393a':index%2 && patch%3===1?'#242b29':random()>.4?'#bc4427':'#d55d2d';
+  const phase=random()*6;
+  for(const offset of [-512,0,512]){
+    ctx.fillStyle=ink;ctx.beginPath();
+    for(let n=0;n<90;n++){
+      const a=n/90*Math.PI*2,r=1+.17*Math.sin(a*3+phase)+.095*Math.sin(a*5-phase);
+      ctx.lineTo(x+Math.cos(a)*rx*r,y+offset+Math.sin(a)*ry*r);
+    }
     ctx.closePath();ctx.fill();
   }
 }
@@ -177,7 +198,23 @@ function fin(outline:number[][], shade:number){
 }
 for(const sign of [-1,1]){
   fin([[-.96,0,0],[-1.57,.38*sign,.04],[-1.47,.18*sign,.04],[-1.34,0,.02]],0xde9a68);
-  fin([[.50,-.02,.38*sign],[.29,-.11,.68*sign],[-.09,-.12,.81*sign],[-.04,-.06,.57*sign],[.24,0,.37*sign]],0xe6b98a);
+  // A rounded pectoral fan with a scalloped edge and translucent fin rays.
+  const root=new T.Vector3(.43,-.04,.32*sign);
+  const vertices=[root.x,root.y,root.z], colors=[.79,.65,.43], triangles:number[]=[];
+  for(let ray=0;ray<=32;ray++){
+    const t=ray/32, a=-.12+1.76*t, length=.24+.32*Math.sin(Math.PI*t)**.64+.014*Math.cos(ray*Math.PI/2);
+    vertices.push(root.x-length*Math.sin(a),root.y-.09*Math.sin(t*Math.PI),root.z+sign*length*Math.cos(a));
+    const glow=ray%3===0?.88:.66;
+    colors.push(glow,glow*.86,glow*.68);
+    if(ray>0) triangles.push(0,ray,ray+1);
+  }
+  const fan=new T.BufferGeometry();
+  fan.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
+  fan.setAttribute('color',new T.Float32BufferAttribute(colors,3));fan.setIndex(triangles);fan.computeVertexNormals();
+  fish.add(new T.Mesh(fan,new T.MeshStandardMaterial({vertexColors:true,transparent:true,opacity:.69,side:T.DoubleSide,depthWrite:false})));
+  moving.push(fan);
+  const whisker=new T.QuadraticBezierCurve3(new T.Vector3(1.07,-.035,.095*sign),new T.Vector3(1.14,-.07,.16*sign),new T.Vector3(1.09,-.14,.21*sign));
+  fish.add(new T.Mesh(new T.TubeGeometry(whisker,9,.011,5,false),new T.MeshStandardMaterial({color:0xc2a082})));
   const eye=new T.Mesh(new T.SphereGeometry(.054,16,12),new T.MeshStandardMaterial({color:0x171c16,roughness:.22}));
   eye.position.set(.88,.12,.27*sign);fish.add(eye);
 }
@@ -190,6 +227,13 @@ sc.fillStyle=gradient;sc.fillRect(0,0,128,128);
 const shadow=new T.Mesh(new T.PlaneGeometry(3.6,1.25),new T.MeshBasicMaterial({map:new T.CanvasTexture(shadowCanvas),transparent:true,depthWrite:false}));
 shadow.rotation.order='YXZ';shadow.rotation.x=-Math.PI/2;scene.add(shadow);
 
+const route=index*2*Math.PI/5+random()*.24;
+fish.position.set(Math.cos(route)*2.8,0,Math.sin(route)*1.85);
+shadow.scale.setScalar(size);
+return {fish,shadow,moving,rest,route,tempo:.21+random()*.10,depth:-random()*.35,phase:random()*6,heading:route+Math.PI/2};
+}
+const school=Array.from({length:5},(_,i)=>createKoi(i));
+
 let spanX=5,spanZ=4;
 function resize(){
   const w=canvas.clientWidth,h=canvas.clientHeight;
@@ -200,7 +244,7 @@ function resize(){
 resize();window.addEventListener('resize',resize);
 const ray=new T.Raycaster(),surface=new T.Plane(new T.Vector3(0,1,0),-.45);
 const target=new T.Vector3(), waypoint=new T.Vector3();
-let attention=0,heading=0,phase=0,elapsed=0;
+let attention=0,elapsed=0;
 const ripples:{mesh:T.Mesh<T.RingGeometry,T.MeshBasicMaterial>,age:number}[]=[];
 let tap: {id:number,x:number,y:number} | undefined;
 canvas.addEventListener('pointerdown',e=>{
@@ -224,15 +268,26 @@ canvas.addEventListener('pointerup',e=>{
 let previous=performance.now();
 renderer.setAnimationLoop(now=>{
   const dt=Math.min((now-previous)/1000,.05);previous=now;elapsed+=dt;clockUniform.value=elapsed;
-  waypoint.set(Math.sin(elapsed*.33)*Math.min(3.4,spanX*.65),0,Math.sin(elapsed*.53)*Math.min(2.3,spanZ*.55));
-  if(attention>0){waypoint.copy(target);attention-=dt;}
+  attention=Math.max(0,attention-dt);
+  for(const koi of school){
+  const {fish,shadow,moving,rest,route,tempo}=koi;
+  let {heading,phase}=koi;
+  const angle=elapsed*tempo+route;
+  waypoint.set(Math.cos(angle)*Math.min(3.6,spanX*.68),0,Math.sin(angle+Math.sin(angle*2+route)*.35)*Math.min(2.65,spanZ*.62));
+  if(attention>0) waypoint.set(target.x+Math.cos(route)*1.18,0,target.z+Math.sin(route)*1.18);
+  for(const other of school){
+    if(other===koi)continue;
+    const x=fish.position.x-other.fish.position.x,z=fish.position.z-other.fish.position.z;
+    const d=Math.hypot(x,z);
+    if(d<1.8 && d>.001){waypoint.x+=x/d*(1.8-d)*2;waypoint.z+=z/d*(1.8-d)*2;}
+  }
   const dx=waypoint.x-fish.position.x,dz=waypoint.z-fish.position.z,dist=Math.hypot(dx,dz);
   const diff=Math.atan2(Math.sin(Math.atan2(dz,dx)-heading),Math.cos(Math.atan2(dz,dx)-heading));
   if(dist>.12)heading+=T.MathUtils.clamp(diff,-1.45*dt,1.45*dt);
   const speed=Math.min(attention>0?1.7:1.12,dist*1.7);
   fish.position.x+=Math.cos(heading)*speed*dt;fish.position.z+=Math.sin(heading)*speed*dt;
-  fish.position.y=.045*Math.sin(elapsed*1.4);fish.rotation.y=-heading;
-  phase+=dt*(3.1+speed*2.3);
+  fish.position.y=koi.depth+.05*Math.sin(elapsed*1.4+route);fish.rotation.y=-heading;
+  phase+=dt*(2+tempo*4+speed*1.9);
   moving.forEach((g,k)=>{
     const p=g.getAttribute('position'),base=rest[k];
     for(let i=0;i<p.count;i++){
@@ -242,6 +297,8 @@ renderer.setAnimationLoop(now=>{
     p.needsUpdate=true;
   });
   shadow.position.set(fish.position.x+.20,-.81,fish.position.z+.17);shadow.rotation.y=-heading;
+  koi.heading=heading;koi.phase=phase;
+  }
   for(let i=ripples.length-1;i>=0;i--){
     const r=ripples[i];r.age+=dt;r.mesh.visible=r.age>=0;
     r.mesh.scale.setScalar(Math.max(.01,r.age*.88));r.mesh.material.opacity=Math.max(0,.45*(1-r.age/2));
