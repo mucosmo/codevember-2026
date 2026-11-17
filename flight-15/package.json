@@ -1,0 +1,1 @@
+{"name":"starship-flight-15","private":true,"type":"module","scripts":{"dev":"vite","build":"vite build --base=./"},"dependencies":{"three":"^0.187.0"},"devDependencies":{"vite":"^7.3.1"}}
