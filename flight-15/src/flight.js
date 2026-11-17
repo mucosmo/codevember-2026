@@ -1,3 +1,4 @@
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import * as T from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -50,15 +51,36 @@ async function loadTower(){
  tower.position.copy(towerAnchor);tower.scale.setScalar(towerScale);
  const frame=mat(0x939fa1,.54,.48),hardware=mat(0x645f55,.60,.51);
  tower.traverse(part=>{if(part.isMesh)part.material=part.name==='TowerStatic'?frame:hardware;});
- const left=tower.getObjectByName('LeftChopstick'),right=tower.getObjectByName('RightChopstick');
- for(const part of [left,right,tower.getObjectByName('Carriage')])part.position.y-=17;
- left.rotateY(.18);right.rotateY(-.18);
+ // Mesh compression recentres each mesh. Recreate the kit's original
+ // attachment frames before applying rotations about the hinge pins.
+ function mount(name,x,z){
+   const part=tower.getObjectByName(name),pivot=new T.Group();
+   pivot.position.set(x,91,z);
+   part.position.sub(pivot.position);
+   tower.add(pivot);pivot.add(part);pivot.position.y-=17;
+   return pivot;
+ }
+ tower.getObjectByName('TowerStatic').rotateY(T.MathUtils.degToRad(44));
+ const carriage=mount('Carriage',0,0);
+ carriage.position.x+=4;
+ carriage.rotation.set(0,Math.PI,Math.PI/2);
+ mount('LeftChopstick',2.274,-.884).rotation.y=.54;
+ mount('RightChopstick',2.274,.884).rotation.y=-.54;
  pad.add(tower);
 }
 // The distributed GLB omits the ship quick-disconnect arm. Mount a separate
 // swing-out service truss to the rocket-facing corner of the imported column.
 const qd=new T.Group();qd.position.set(towerAnchor.x+1.9,24.3,-1.35);pad.add(qd);
 const qdSteel=mat(0x727d7c,.64,.49), conduit=mat(0xaab3ad,.65,.36);
+// A stationary cantilever carries both bearings; only the truss swings.
+for(const level of [-.58,.62]){
+ const y=qd.position.y+level;
+ for(const z of [-1.7,.25]){
+   tube(pad,V(towerAnchor.x-.55,y,z),V(qd.position.x,y,qd.position.z),.14,qdSteel);
+   tube(pad,V(towerAnchor.x-.55,y-1.05,z),V(qd.position.x,y,qd.position.z),.10,qdSteel);
+ }
+ mesh(pad,new T.CylinderGeometry(.41,.41,.20,24),qdSteel,qd.position.x,y,qd.position.z);
+}
 mesh(qd,new T.CylinderGeometry(.34,.34,1.68,24),iron);
 for(const side of [-1,1]){
  const z=side*.34;
@@ -139,7 +161,11 @@ stages.forEach(([t,label])=>select.add(new Option(label,String(t))));
 let time=0,playing=true,angle=0,last=performance.now(),stage=-1;
 select.onchange=()=>{time=Number(select.value);};timeline.oninput=()=>{time=duration*Number(timeline.value)/1000;};
 play.onclick=()=>{if(time>=duration)time=0;playing=!playing;};
-document.querySelector('#view').onclick=()=>{angle=(angle+1)%3;};
+const orbit=new OrbitControls(camera,canvas);
+orbit.enableDamping=false;orbit.minDistance=7;orbit.maxDistance=260;
+orbit.minPolarAngle=.04;orbit.maxPolarAngle=Math.PI*.64;
+let previousAim=null,previousDistance=0;
+document.querySelector('#view').onclick=()=>{angle=(angle+1)%3;previousAim=null;};
 function draw(now){
  const dt=Math.min((now-last)/1000,.15);last=now;if(playing)time=Math.min(duration,time+dt);if(time===duration)playing=false;
  const t=time, lift=Math.max(t-7,0),split=Math.max(0,t-33),air=ease(17,48,t);
@@ -153,7 +179,15 @@ function draw(now){
  const distance=(canvas.clientWidth/canvas.clientHeight<.85?108:85)+19*ease(6,15,t)-ease(23,48,t)*53;
  const bearing=[.43,-.57,1.05][angle];
  aim.y-=5*ease(6,15,t)*(1-ease(25,38,t));
- camera.position.copy(aim).add(V(Math.sin(bearing)*distance,-8+air*25,Math.cos(bearing)*distance));camera.lookAt(aim);
+ if(!previousAim){
+   orbit.target.copy(aim);
+   camera.position.copy(aim).add(V(Math.sin(bearing)*distance,-8+air*25,Math.cos(bearing)*distance));
+ }else{
+   const offset=camera.position.clone().sub(orbit.target).multiplyScalar(distance/previousDistance);
+   orbit.target.add(aim.clone().sub(previousAim));
+   camera.position.copy(orbit.target).add(offset);
+ }
+ orbit.update();previousAim=aim;previousDistance=distance;
  sky.position.copy(camera.position);sky.material.uniforms.space.value=ease(22,46,t);
  earth.visible=t>42;if(earth.visible)earth.position.copy(aim).add(V(0,-843,-195));
  pad.visible=t<44;
