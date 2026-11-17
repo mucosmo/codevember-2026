@@ -1,6 +1,8 @@
 import * as T from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
-import {heatShield,frostedShell,cloudMap,exhaust} from './launch-look.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
+import {heatShield,cloudMap,exhaust} from './launch-look.js';
 import './style.css';
 
 const stages=[
@@ -72,28 +74,38 @@ const boosterHeight=19,shipHeight=14;
 function hull(parent,profile,material,start=0,arc=Math.PI*2){
   return mesh(parent,new T.LatheGeometry(profile.map(([r,y])=>new T.Vector2(r,y)),72,start,arc),material);
 }
-hull(booster,[[1.28,0],[1.38,.3],[1.38,18.3],[1.32,19]],steel);
-hull(booster,[[1.387,.45],[1.387,18.24]],frostedShell());
 const profile=[[1.32,0],[1.36,.2],[1.36,8.2],[1.31,9.9],[1.12,11.4],[.79,12.6],[.39,13.55],[.03,14]];
 hull(ship,profile,steel);
 hull(ship,profile.map(([r,y])=>[r+.008,y]),heatShield(),-.68,Math.PI*.96);
-for(const [parent,limit] of [[booster,18.5],[ship,8.3]])for(let y=.6;y<limit;y+=.62){
+for(const [parent,limit] of [[ship,8.3]])for(let y=.6;y<limit;y+=.62){
  const ring=mesh(parent,new T.TorusGeometry(parent===ship?1.365:1.386,.009,5,64),iron,0,y);ring.rotation.x=Math.PI/2;
 }
 function flap(side,y,w,h){const s=new T.Shape();s.moveTo(0,0);s.lineTo(w*.82,.08);s.lineTo(w,h*.32);s.lineTo(0,h);s.closePath();
  const f=mesh(ship,new T.ExtrudeGeometry(s,{depth:.12,bevelEnabled:false}),black,side*1.07,y);f.scale.x=side;}
 for(const side of [-1,1]){flap(side,.16,1.07,4.2);flap(side,9.4,.7,2.4);}
-for(let j=0;j<3;j++){const frame=new T.Group();booster.add(frame);frame.rotation.y=j*2*Math.PI/3;
- for(let i=0;i<7;i++){box(frame,1.6+i*.12,18.18,0,.04,.36,.88,iron);box(frame,1.98,18.18,-.42+i*.14,.83,.36,.04,iron);}}
-// Bell silhouettes and the vented interstage remain visible during the separation shot.
-for(const [vehicle,rings] of [[ship,[[3,.47],[3,.92]]],[booster,[[3,.30],[10,.70],[20,1.07]]]]){
- for(const [count,r] of rings)for(let i=0;i<count;i++){
-  const a=i*Math.PI*2/count;
-  mesh(vehicle,new T.CylinderGeometry(.10,.20,.45,12,1,true),black,Math.cos(a)*r,-.12,Math.sin(a)*r);
- }
+for(const r of [.47,.92])for(let i=0;i<3;i++){
+ const a=i*Math.PI*2/3;
+ mesh(ship,new T.CylinderGeometry(.10,.20,.45,12,1,true),black,Math.cos(a)*r,-.12,Math.sin(a)*r);
 }
-for(let i=0;i<32;i++){const a=i*Math.PI/16;
- const vent=box(booster,Math.sin(a)*1.34,18.76,Math.cos(a)*1.34,.15,.27,.045,black);vent.rotation.y=a;
+const engineCenters=[];
+async function loadBooster(){
+ const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+ const {scene:model}=await loader.loadAsync(import.meta.env.BASE_URL+'models/super-heavy.glb');
+ const bounds=new T.Box3().setFromObject(model,true);
+ const scale=boosterHeight/(bounds.max.y-bounds.min.y);
+ const engines=[];
+ model.traverse(node=>{if(/^RAPTOR[_ ](inner|middle|outer)/i.test(node.name))engines.push(node);});
+ for(const node of engines){
+   const box=new T.Box3().setFromObject(node,true),center=box.getCenter(new T.Vector3());
+   center.y=box.min.y;engineCenters.push(center);
+ }
+ const center=bounds.getCenter(new T.Vector3());
+ if(engineCenters.length){
+   center.set(0,0,0);for(const engine of engineCenters)center.add(engine);center.divideScalar(engineCenters.length);
+ }
+ model.scale.multiplyScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+ for(const engine of engineCenters)engine.multiplyScalar(scale).add(model.position);
+ booster.add(model);
 }
 function spriteTexture(){const c=document.createElement('canvas');c.width=c.height=96;const ctx=c.getContext('2d'),g=ctx.createRadialGradient(48,48,0,48,48,48);g.addColorStop(0,'white');g.addColorStop(.42,'rgba(255,255,255,.64)');g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,96,96);return new T.CanvasTexture(c);}
 const soft=spriteTexture();
@@ -105,7 +117,9 @@ const vapor=particles(35,false);
 const smoke=particles(110,false),clouds=[41,82,163,299].map(cloudMap);
 smoke.forEach(({p},i)=>{p.material.map=clouds[i%4];});
 booster.name='Super Heavy';
-const boosterFlame=exhaust(booster,1.42,13),shipFlame=exhaust(ship,1.04,10);
+let boosterFlame=()=>{};
+const boostReady=loadBooster().then(()=>{boosterFlame=exhaust(booster,1.42,13,engineCenters);});
+const shipFlame=exhaust(ship,1.04,10);
 const ignitionLight=new T.PointLight(0xff955c,0,32);scene.add(ignitionLight);
 const sky=new T.Mesh(new T.SphereGeometry(3000,40,24),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms:{space:{value:0}},vertexShader:'varying vec3 d;void main(){d=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:`varying vec3 d;uniform float space;
 void main(){vec3 n=normalize(d);float h=max(n.y,0.);vec3 c=mix(vec3(.40,.53,.54),vec3(.045,.19,.34),smoothstep(0.,.36,h));float streak=sin(n.x*22.+n.y*83.+sin(n.x*9.+n.z*11.)*2.)*.5+.5;c+=vec3(.08,.071,.059)*pow(streak,4.)*smoothstep(.003,.07,h)*(1.-smoothstep(.13,.39,h));
@@ -165,4 +179,4 @@ function draw(now){
  renderer.render(scene,camera);
 }
 function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}
-resize();window.addEventListener('resize',resize);renderer.setAnimationLoop(draw);
+resize();window.addEventListener('resize',resize);boostReady.then(()=>{last=performance.now();renderer.setAnimationLoop(draw);}).catch(error=>{document.querySelector('#caption').textContent='助推器模型加载失败，请刷新重试。';console.error(error);});

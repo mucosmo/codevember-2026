@@ -52,7 +52,7 @@ export function cloudMap(seed){
   });
 }
 
-export function exhaust(parent,radius,length){
+export function exhaust(parent,radius,length,centers=[]){
   const group=new T.Group();parent.add(group);
   const shader=new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.FrontSide,
     blending:T.NormalBlending,uniforms:{clock:{value:0},power:{value:0}},
@@ -77,7 +77,7 @@ export function exhaust(parent,radius,length){
     color:0xffc7b3,transparent:true,opacity:.13,depthWrite:false,blending:T.AdditiveBlending}),outlets.count);
   const dummy=new T.Object3D();let k=0;
   for(const [count,r] of rings)for(let n=0;n<count;n++){
-    const a=n*2*Math.PI/count;dummy.position.set(r*Math.sin(a),-.36,r*Math.cos(a));dummy.rotation.set(Math.PI/2,0,0);dummy.updateMatrix();outlets.setMatrixAt(k,dummy.matrix);
+    const a=n*2*Math.PI/count;dummy.position.set(r*Math.sin(a),-.36,r*Math.cos(a));if(centers[k])dummy.position.copy(centers[k]);dummy.rotation.set(Math.PI/2,0,0);dummy.updateMatrix();outlets.setMatrixAt(k,dummy.matrix);
     dummy.position.y-=length*.15;dummy.rotation.set(Math.PI,0,0);dummy.updateMatrix();jets.setMatrixAt(k++,dummy.matrix);
   }
   group.add(outlets,jets);group.position.y=-.04;

@@ -1,0 +1,11 @@
+SpaceX Starship Superheavy V3 — Ijsz23
+Original: https://sketchfab.com/3d-models/spacex-starship-superheavy-v3-12c91924d743465aac22f29ad8ba2e45
+Licence: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+Derivative GLB distributed by Starbase Simulator:
+https://starbase-simulator.com/credits
+https://starbase-simulator.com/app/models/booster.glb
+Starbase Simulator optimised textures and geometry and re-rigged the model.
+This Flight 15 visualisation further simplifies geometry by component,
+recompresses the mesh, fits its scale, and aligns the exhaust with the engine nodes.
