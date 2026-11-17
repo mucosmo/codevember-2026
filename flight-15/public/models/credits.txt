@@ -17,3 +17,12 @@ https://creativecommons.org/licenses/by/4.0/
 Derivative distributed by Starbase Simulator: https://starbase-simulator.com/app/models/ship.glb
 Flight 15 modifications: extracted the upper stage, simplified geometry by part,
 preserved UVs and materials, recompressed the mesh and aligned exhaust to the six engines.
+
+Launch tower, carriage and chopsticks: MikeNotBrick, Starship Launch Tower & Launch Pad with Functional Chopsticks.
+Original: https://www.thingiverse.com/thing:5908857
+Licence: Creative Commons Attribution 4.0 International — https://creativecommons.org/licenses/by/4.0/
+Assembled GLB: Starship Catch Simulator contributors
+https://github.com/dionismuzenitov/starship-catch-sim/blob/main/apps/web/public/assets/mechazilla-tower.glb
+Flight 15 adaptations: recompressed with meshopt, scaled, shaded and posed in the scene.
+The community tower represents an earlier Starbase layout. The ship quick-disconnect
+arm and its retraction animation are approximations created for this replay.

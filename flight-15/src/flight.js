@@ -42,30 +42,37 @@ const shore=mesh(pad,new T.PlaneGeometry(4000,1500),mat(0x637d88,.25,.32),0,-.06
 shore.rotation.x=-Math.PI/2;
 box(pad,0,.05,0,92,.2,60,mat(0x91928a));
 for(let j=0;j<5;j++){const m=mesh(pad,new T.CylinderGeometry(4,4,6,36),frost,-42+j*10,3,-35);mesh(pad,new T.SphereGeometry(4,24,12),frost,m.position.x,6,-35).scale.y=.25;}
-const tx=-10;
-for(const x of [-2,2])for(const z of [-2,2])box(pad,tx+x,20,z,.39,40,.39,iron);
-for(let y=1;y<40;y+=2.6){
-  box(pad,tx,y,0,4.6,.2,4.6,iron);
-  for(const z of [-2,2])tube(pad,V(tx-2,y,z),V(tx+2,y+2.6,z),.13,iron);
-  for(const x of [-2,2])tube(pad,V(tx+x,y,-2),V(tx+x,y+2.6,2),.13,iron);
+// MikeNotBrick's assembled tower has separate meshes for both arms and the carriage.
+const towerAnchor=V(-8.4,.15,0),towerScale=40/146;
+async function loadTower(){
+ const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+ const {scene:tower}=await loader.loadAsync(import.meta.env.BASE_URL+'models/mechazilla.glb');
+ tower.position.copy(towerAnchor);tower.scale.setScalar(towerScale);
+ const frame=mat(0x939fa1,.54,.48),hardware=mat(0x645f55,.60,.51);
+ tower.traverse(part=>{if(part.isMesh)part.material=part.name==='TowerStatic'?frame:hardware;});
+ const left=tower.getObjectByName('LeftChopstick'),right=tower.getObjectByName('RightChopstick');
+ for(const part of [left,right,tower.getObjectByName('Carriage')])part.position.y-=17;
+ left.rotateY(.18);right.rotateY(-.18);
+ pad.add(tower);
 }
-const service=mat(0x9da6a8,.52,.63),rail=mat(0x666968,.6);
-box(pad,tx-1.4,20,.8,1.05,40,1.1,service);
-box(pad,tx,39.9,0,4.8,1.1,4.7,service);
-for(let y=2;y<39;y+=2.6){
-  tube(pad,V(tx+2,y,-2),V(tx-2,y+2.6,-2),.11,iron);
-  box(pad,tx+1.55,y+.4,2.07,.88,.06,1.2,service);
+// The distributed GLB omits the ship quick-disconnect arm. Mount a separate
+// swing-out service truss to the rocket-facing corner of the imported column.
+const qd=new T.Group();qd.position.set(towerAnchor.x+1.9,24.3,-1.35);pad.add(qd);
+const qdSteel=mat(0x727d7c,.64,.49), conduit=mat(0xaab3ad,.65,.36);
+mesh(qd,new T.CylinderGeometry(.34,.34,1.68,24),iron);
+for(const side of [-1,1]){
+ const z=side*.34;
+ tube(qd,V(0,0,z),V(5.5,0,z),.085,qdSteel);
+ tube(qd,V(0,1.04,z),V(5.5,.38,z),.075,qdSteel);
+ for(let k=0;k<6;k++){
+  const x=k*.9,h=1.04-x*.12;
+  tube(qd,V(x,h,z),V(x+.9,0,z),.045,qdSteel);
+  tube(qd,V(x,0,z),V(x,h,z),.047,qdSteel);
+  tube(qd,V(x,h,-.34),V(x,h,.34),.04,qdSteel);
+ }
+ tube(qd,V(.1,-.16,z),V(5.48,-.16,z),.09,conduit);
 }
-for(const z of [-2.35,2.35]){
-  box(pad,-5.8,22,z,7.6,.24,.55,rail);
-  tube(pad,V(-9.1,20,z),V(-2.1,22,z),.16,iron);
-  for(let j=0;j<4;j++)tube(pad,V(-9+j*1.5,20+j*.42,z),V(-7.5+j*1.5,22,z),.09,iron);
-}
-box(pad,tx+2.25,21,0,1.05,4.8,4.8,service);
-for(const z of [-.65,.65]){
-  tube(pad,V(-8,29,z),V(-1.65,29,z),.14,iron);
-  tube(pad,V(-8,30.2,z),V(-1.65,29,z),.12,iron);
-}
+box(qd,5.56,.1,0,.46,.62,.89,qdSteel);
 for(const x of [-2,2])for(const z of [-2,2])box(pad,x,1.3,z,.65,2.6,.65,iron);
 mesh(pad,new T.CylinderGeometry(3.45,3.7,.9,48),iron,0,2.5);
 
@@ -105,7 +112,8 @@ booster.name='Super Heavy';
 let boosterFlame,shipFlame;
 const modelsReady=Promise.all([
  loadStage(booster,'super-heavy.glb',boosterHeight,/^RAPTOR[_ ](inner|middle|outer)/i),
- loadStage(ship,'starship.glb',shipHeight,/^Raptor[_ ]3/i)
+ loadStage(ship,'starship.glb',shipHeight,/^Raptor[_ ]3/i),
+ loadTower()
 ]).then(([boosterCenters,shipCenters])=>{
  boosterFlame=exhaust(booster,1.42,13,boosterCenters);
  shipFlame=exhaust(ship,1.04,10,shipCenters);
@@ -135,6 +143,7 @@ document.querySelector('#view').onclick=()=>{angle=(angle+1)%3;};
 function draw(now){
  const dt=Math.min((now-last)/1000,.15);last=now;if(playing)time=Math.min(duration,time+dt);if(time===duration)playing=false;
  const t=time, lift=Math.max(t-7,0),split=Math.max(0,t-33),air=ease(17,48,t);
+ qd.rotation.y=-.205+.99*ease(6.2,8.4,t);
  const height=2.95+.098*lift*lift,tilt=-.83*ease(12,54,t);
  const direction=V(-Math.sin(tilt),Math.cos(tilt),0),foot=V(lift*lift*.037,height,0);
  booster.position.copy(foot);booster.rotation.z=tilt;
@@ -169,4 +178,4 @@ function draw(now){
  renderer.render(scene,camera);
 }
 function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}
-resize();window.addEventListener('resize',resize);modelsReady.then(()=>{last=performance.now();renderer.setAnimationLoop(draw);}).catch(error=>{document.querySelector('#caption').textContent='飞行器模型加载失败，请刷新重试。';console.error(error);});
+resize();window.addEventListener('resize',resize);modelsReady.then(()=>{last=performance.now();renderer.setAnimationLoop(draw);}).catch(error=>{document.querySelector('#caption').textContent='场景模型加载失败，请刷新重试。';console.error(error);});
