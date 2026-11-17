@@ -1,5 +1,6 @@
 import * as T from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {heatShield,frostedShell,cloudMap,exhaust} from './launch-look.js';
 import './style.css';
 
 const stages=[
@@ -46,7 +47,23 @@ for(let y=1;y<40;y+=2.6){
   for(const z of [-2,2])tube(pad,V(tx-2,y,z),V(tx+2,y+2.6,z),.13,iron);
   for(const x of [-2,2])tube(pad,V(tx+x,y,-2),V(tx+x,y+2.6,2),.13,iron);
 }
-for(const z of [-2.5,2.5])box(pad,-5,22,z,8,.47,.65,iron);
+const service=mat(0x9da6a8,.52,.63),rail=mat(0x666968,.6);
+box(pad,tx-1.4,20,.8,1.05,40,1.1,service);
+box(pad,tx,39.9,0,4.8,1.1,4.7,service);
+for(let y=2;y<39;y+=2.6){
+  tube(pad,V(tx+2,y,-2),V(tx-2,y+2.6,-2),.11,iron);
+  box(pad,tx+1.55,y+.4,2.07,.88,.06,1.2,service);
+}
+for(const z of [-2.35,2.35]){
+  box(pad,-5.8,22,z,7.6,.24,.55,rail);
+  tube(pad,V(-9.1,20,z),V(-2.1,22,z),.16,iron);
+  for(let j=0;j<4;j++)tube(pad,V(-9+j*1.5,20+j*.42,z),V(-7.5+j*1.5,22,z),.09,iron);
+}
+box(pad,tx+2.25,21,0,1.05,4.8,4.8,service);
+for(const z of [-.65,.65]){
+  tube(pad,V(-8,29,z),V(-1.65,29,z),.14,iron);
+  tube(pad,V(-8,30.2,z),V(-1.65,29,z),.12,iron);
+}
 for(const x of [-2,2])for(const z of [-2,2])box(pad,x,1.3,z,.65,2.6,.65,iron);
 mesh(pad,new T.CylinderGeometry(3.45,3.7,.9,48),iron,0,2.5);
 
@@ -56,20 +73,20 @@ function hull(parent,profile,material,start=0,arc=Math.PI*2){
   return mesh(parent,new T.LatheGeometry(profile.map(([r,y])=>new T.Vector2(r,y)),72,start,arc),material);
 }
 hull(booster,[[1.28,0],[1.38,.3],[1.38,18.3],[1.32,19]],steel);
-hull(booster,[[1.385,3],[1.385,15.5]],frost);
+hull(booster,[[1.387,.45],[1.387,18.24]],frostedShell());
 const profile=[[1.32,0],[1.36,.2],[1.36,8.2],[1.31,9.9],[1.12,11.4],[.79,12.6],[.39,13.55],[.03,14]];
 hull(ship,profile,steel);
-hull(ship,profile.map(([r,y])=>[r+.008,y]),black,1.85,Math.PI*.94);
+hull(ship,profile.map(([r,y])=>[r+.008,y]),heatShield(),-.68,Math.PI*.96);
 for(const [parent,limit] of [[booster,18.5],[ship,8.3]])for(let y=.6;y<limit;y+=.62){
  const ring=mesh(parent,new T.TorusGeometry(parent===ship?1.365:1.386,.009,5,64),iron,0,y);ring.rotation.x=Math.PI/2;
 }
 function flap(side,y,w,h){const s=new T.Shape();s.moveTo(0,0);s.lineTo(w*.82,.08);s.lineTo(w,h*.32);s.lineTo(0,h);s.closePath();
  const f=mesh(ship,new T.ExtrudeGeometry(s,{depth:.12,bevelEnabled:false}),black,side*1.07,y);f.scale.x=side;}
 for(const side of [-1,1]){flap(side,.16,1.07,4.2);flap(side,9.4,.7,2.4);}
-for(let j=0;j<4;j++){const frame=new T.Group();booster.add(frame);frame.rotation.y=j*Math.PI/2;
+for(let j=0;j<3;j++){const frame=new T.Group();booster.add(frame);frame.rotation.y=j*2*Math.PI/3;
  for(let i=0;i<7;i++){box(frame,1.6+i*.12,18.18,0,.04,.36,.88,iron);box(frame,1.98,18.18,-.42+i*.14,.83,.36,.04,iron);}}
 // Bell silhouettes and the vented interstage remain visible during the separation shot.
-for(const [vehicle,rings] of [[ship,[[3,.47],[3,.92]]],[booster,[[8,.56],[16,1.03]]]]){
+for(const [vehicle,rings] of [[ship,[[3,.47],[3,.92]]],[booster,[[3,.30],[10,.70],[20,1.07]]]]){
  for(const [count,r] of rings)for(let i=0;i<count;i++){
   const a=i*Math.PI*2/count;
   mesh(vehicle,new T.CylinderGeometry(.10,.20,.45,12,1,true),black,Math.cos(a)*r,-.12,Math.sin(a)*r);
@@ -85,10 +102,14 @@ function particles(n,additive){return Array.from({length:n},(_,i)=>{
  const p=new T.Sprite(m);scene.add(p);return {p,a:i*2.39996,h:(i*.6180339)%1};
 });}
 const vapor=particles(35,false);
-const smoke=particles(145,false),flame=particles(100,true);
+const smoke=particles(110,false),clouds=[41,82,163,299].map(cloudMap);
+smoke.forEach(({p},i)=>{p.material.map=clouds[i%4];});
+booster.name='Super Heavy';
+const boosterFlame=exhaust(booster,1.42,13),shipFlame=exhaust(ship,1.04,10);
+const ignitionLight=new T.PointLight(0xff955c,0,32);scene.add(ignitionLight);
 const sky=new T.Mesh(new T.SphereGeometry(3000,40,24),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms:{space:{value:0}},vertexShader:'varying vec3 d;void main(){d=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:`varying vec3 d;uniform float space;
-void main(){vec3 n=normalize(d);float h=max(n.y,0.);vec3 c=mix(vec3(.52,.39,.31),vec3(.08,.19,.34),smoothstep(0.,.38,h));float streak=sin(n.x*22.+n.y*83.+sin(n.x*9.+n.z*11.)*2.)*.5+.5;c+=vec3(.08,.071,.059)*pow(streak,4.)*smoothstep(.003,.07,h)*(1.-smoothstep(.13,.39,h));
-float sun=max(dot(n,normalize(vec3(-.6,.12,-.75))),0.);c+=vec3(.8,.54,.26)*pow(sun,35.);
+void main(){vec3 n=normalize(d);float h=max(n.y,0.);vec3 c=mix(vec3(.40,.53,.54),vec3(.045,.19,.34),smoothstep(0.,.36,h));float streak=sin(n.x*22.+n.y*83.+sin(n.x*9.+n.z*11.)*2.)*.5+.5;c+=vec3(.08,.071,.059)*pow(streak,4.)*smoothstep(.003,.07,h)*(1.-smoothstep(.13,.39,h));
+float sun=max(dot(n,normalize(vec3(-.6,.12,-.75))),0.);c+=vec3(.29,.21,.13)*pow(sun,48.);
 gl_FragColor=vec4(mix(c,vec3(.0004,.001,.003),space),1.);
 #include <colorspace_fragment>
 }`}));
@@ -116,23 +137,29 @@ function draw(now){
  ship.position.copy(foot).addScaledVector(direction,boosterHeight+split*.68);ship.rotation.z=tilt;
  booster.position.y-=split*split*.21;booster.position.x-=split*.65;booster.rotation.z+=split*.19;booster.visible=t<49;
  const aim=foot.clone().addScaledVector(direction,16).lerp(ship.position.clone().addScaledVector(direction,7),ease(28,39,t));
- const distance=(canvas.clientWidth/canvas.clientHeight<.85?92:69)-ease(23,48,t)*24;
+ const distance=(canvas.clientWidth/canvas.clientHeight<.85?108:85)+19*ease(6,15,t)-ease(23,48,t)*53;
  const bearing=[.43,-.57,1.05][angle];
- camera.position.copy(aim).add(V(Math.sin(bearing)*distance,5+air*12,Math.cos(bearing)*distance));camera.lookAt(aim);
+ aim.y-=5*ease(6,15,t)*(1-ease(25,38,t));
+ camera.position.copy(aim).add(V(Math.sin(bearing)*distance,-8+air*25,Math.cos(bearing)*distance));camera.lookAt(aim);
  sky.position.copy(camera.position);sky.material.uniforms.space.value=ease(22,46,t);
  earth.visible=t>42;if(earth.visible)earth.position.copy(aim).add(V(0,-843,-195));
  pad.visible=t<44;
  vapor.forEach(({p,h,a})=>{const age=(t*.32+h)%1;p.visible=t<12;
  p.position.set(1.25+age*3,19+Math.sin(a)*.28-age*1.45,Math.sin(a)*age);
  p.scale.setScalar(.25+age*1.65);p.material.opacity=.37*Math.sin(age*Math.PI)*(1-ease(6,12,t));p.material.color.setHex(0xe8eef1);});
- smoke.forEach(({p,a,h})=>{const age=(t*.18+h)%1, power=ease(3,8,t)*(1-ease(17,30,t));p.visible=power>.001;
- const radius=3+age*(10+16*power);p.position.set(Math.cos(a)*radius,1+age*age*8,Math.sin(a)*radius*.63);
- p.scale.setScalar(3+age*15);p.material.opacity=.62*power*Math.sin(age*Math.PI);p.material.color.setHSL(.075,.10,.42+age*.32);});
- flame.forEach(({p,a,h},i)=>{const upper=i>=60, active=upper?ease(32,34,t)*(1-ease(54,58,t)):ease(6,7.3,t)*(1-ease(32,34,t));
- p.visible=active>.001;if(!p.visible)return;const age=(t*1.8+h)%1, r=(upper?.55:.95)*(1-age)+age*.46;
- p.position.copy(upper?ship.position:booster.position).addScaledVector(direction,-age*(upper?9:12)*active);
- p.position.x+=Math.cos(a)*r;p.position.z+=Math.sin(a)*r;p.scale.setScalar((1.1+age*2.3)*active);
- p.material.color.setHSL(.065+age*.025,.85,.83-age*.38);p.material.opacity=(1-age)*.88;});
+ smoke.forEach(({p,a,h},i)=>{
+   const age=(t*.084+h)%1, power=ease(6,8.2,t)*(1-ease(18,34,t));
+   p.visible=power>.001;
+   const side=i%2?1:-1, spread=(3+age*24)*power;
+   p.position.set(side*spread+Math.sin(a)*3,1+age*age*(6+4*h),-2+Math.cos(a)*5+age*2);
+   const size=(3+age*15)*(.85+h*.35);p.scale.set(size*1.23,size,1);
+   p.material.opacity=.91*power*Math.sin(age*Math.PI)**.45;
+   p.material.color.setRGB(1,.83+.15*age,.70+.25*age);
+ });
+ const burn=ease(6,7.4,t)*(1-ease(32,34,t));
+ boosterFlame(t,burn);shipFlame(t,ease(32,34,t)*(1-ease(54,58,t)));
+ ignitionLight.position.copy(booster.position);ignitionLight.position.y-=1;
+ ignitionLight.intensity=burn*(1-ease(12,22,t))*(145+14*Math.sin(t*31));
  const next=stages.findLastIndex(s=>t>=s[0]);if(next!==stage){stage=next;document.querySelector('h2').textContent=stages[next][1];document.querySelector('#caption').textContent=stages[next][2];select.value=String(stages[next][0]);}
  play.textContent=playing?'暂停':time>=duration?'重播':'播放';timeline.value=String(Math.round(time/duration*1000));
  renderer.render(scene,camera);
