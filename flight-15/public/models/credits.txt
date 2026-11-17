@@ -9,3 +9,11 @@ https://starbase-simulator.com/app/models/booster.glb
 Starbase Simulator optimised textures and geometry and re-rigged the model.
 This Flight 15 visualisation further simplifies geometry by component,
 recompresses the mesh, fits its scale, and aligns the exhaust with the engine nodes.
+
+SpaceX Starship Block 3 — Clarence365
+Original: https://sketchfab.com/3d-models/spacex-starship-block-3-6f6c6f88a3eb4b4d822fdca66733fbb2
+Licence: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+Derivative distributed by Starbase Simulator: https://starbase-simulator.com/app/models/ship.glb
+Flight 15 modifications: extracted the upper stage, simplified geometry by part,
+preserved UVs and materials, recompressed the mesh and aligned exhaust to the six engines.

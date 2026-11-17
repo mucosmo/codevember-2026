@@ -2,7 +2,7 @@ import * as T from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
-import {heatShield,cloudMap,exhaust} from './launch-look.js';
+import {cloudMap,exhaust} from './launch-look.js';
 import './style.css';
 
 const stages=[
@@ -21,7 +21,7 @@ scene.environment=pmrem.fromScene(studio,.04).texture;studio.dispose();pmrem.dis
 scene.environmentIntensity=.65;
 const light=new T.DirectionalLight(0xffdbac,3);light.position.set(-40,65,35);scene.add(light,new T.HemisphereLight(0xb2d2ea,0x665044,1.45));
 const mat=(color,metalness=0,roughness=.65)=>new T.MeshStandardMaterial({color,metalness,roughness});
-const steel=mat(0xc1c5c8,.87,.29),frost=mat(0xd8dedc,.47,.46),iron=mat(0x454d50,.7),black=mat(0x292d30,.44);
+const frost=mat(0xd8dedc,.47,.46),iron=mat(0x454d50,.7);
 function mesh(parent,geo,material,x=0,y=0,z=0){const m=new T.Mesh(geo,material);m.position.set(x,y,z);parent.add(m);return m;}
 function box(parent,x,y,z,w,h,d,m){return mesh(parent,new T.BoxGeometry(w,h,d),m,x,y,z);}
 function tube(parent,a,b,r,m){const v=b.clone().sub(a),o=mesh(parent,new T.CylinderGeometry(r,r,v.length(),7),m);o.position.copy(a).lerp(b,.5);o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),v.normalize());return o;}
@@ -71,30 +71,14 @@ mesh(pad,new T.CylinderGeometry(3.45,3.7,.9,48),iron,0,2.5);
 
 const booster=new T.Group(),ship=new T.Group();scene.add(booster,ship);
 const boosterHeight=19,shipHeight=14;
-function hull(parent,profile,material,start=0,arc=Math.PI*2){
-  return mesh(parent,new T.LatheGeometry(profile.map(([r,y])=>new T.Vector2(r,y)),72,start,arc),material);
-}
-const profile=[[1.32,0],[1.36,.2],[1.36,8.2],[1.31,9.9],[1.12,11.4],[.79,12.6],[.39,13.55],[.03,14]];
-hull(ship,profile,steel);
-hull(ship,profile.map(([r,y])=>[r+.008,y]),heatShield(),-.68,Math.PI*.96);
-for(const [parent,limit] of [[ship,8.3]])for(let y=.6;y<limit;y+=.62){
- const ring=mesh(parent,new T.TorusGeometry(parent===ship?1.365:1.386,.009,5,64),iron,0,y);ring.rotation.x=Math.PI/2;
-}
-function flap(side,y,w,h){const s=new T.Shape();s.moveTo(0,0);s.lineTo(w*.82,.08);s.lineTo(w,h*.32);s.lineTo(0,h);s.closePath();
- const f=mesh(ship,new T.ExtrudeGeometry(s,{depth:.12,bevelEnabled:false}),black,side*1.07,y);f.scale.x=side;}
-for(const side of [-1,1]){flap(side,.16,1.07,4.2);flap(side,9.4,.7,2.4);}
-for(const r of [.47,.92])for(let i=0;i<3;i++){
- const a=i*Math.PI*2/3;
- mesh(ship,new T.CylinderGeometry(.10,.20,.45,12,1,true),black,Math.cos(a)*r,-.12,Math.sin(a)*r);
-}
-const engineCenters=[];
-async function loadBooster(){
+async function loadStage(parent,file,height,enginePattern){
+ const engineCenters=[];
  const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
- const {scene:model}=await loader.loadAsync(import.meta.env.BASE_URL+'models/super-heavy.glb');
+ const {scene:model}=await loader.loadAsync(import.meta.env.BASE_URL+'models/'+file);
  const bounds=new T.Box3().setFromObject(model,true);
- const scale=boosterHeight/(bounds.max.y-bounds.min.y);
+ const scale=height/(bounds.max.y-bounds.min.y);
  const engines=[];
- model.traverse(node=>{if(/^RAPTOR[_ ](inner|middle|outer)/i.test(node.name))engines.push(node);});
+ model.traverse(node=>{if(enginePattern.test(node.name))engines.push(node);});
  for(const node of engines){
    const box=new T.Box3().setFromObject(node,true),center=box.getCenter(new T.Vector3());
    center.y=box.min.y;engineCenters.push(center);
@@ -105,7 +89,8 @@ async function loadBooster(){
  }
  model.scale.multiplyScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
  for(const engine of engineCenters)engine.multiplyScalar(scale).add(model.position);
- booster.add(model);
+ parent.add(model);
+ return engineCenters;
 }
 function spriteTexture(){const c=document.createElement('canvas');c.width=c.height=96;const ctx=c.getContext('2d'),g=ctx.createRadialGradient(48,48,0,48,48,48);g.addColorStop(0,'white');g.addColorStop(.42,'rgba(255,255,255,.64)');g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,96,96);return new T.CanvasTexture(c);}
 const soft=spriteTexture();
@@ -117,9 +102,14 @@ const vapor=particles(35,false);
 const smoke=particles(110,false),clouds=[41,82,163,299].map(cloudMap);
 smoke.forEach(({p},i)=>{p.material.map=clouds[i%4];});
 booster.name='Super Heavy';
-let boosterFlame=()=>{};
-const boostReady=loadBooster().then(()=>{boosterFlame=exhaust(booster,1.42,13,engineCenters);});
-const shipFlame=exhaust(ship,1.04,10);
+let boosterFlame,shipFlame;
+const modelsReady=Promise.all([
+ loadStage(booster,'super-heavy.glb',boosterHeight,/^RAPTOR[_ ](inner|middle|outer)/i),
+ loadStage(ship,'starship.glb',shipHeight,/^Raptor[_ ]3/i)
+]).then(([boosterCenters,shipCenters])=>{
+ boosterFlame=exhaust(booster,1.42,13,boosterCenters);
+ shipFlame=exhaust(ship,1.04,10,shipCenters);
+});
 const ignitionLight=new T.PointLight(0xff955c,0,32);scene.add(ignitionLight);
 const sky=new T.Mesh(new T.SphereGeometry(3000,40,24),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,uniforms:{space:{value:0}},vertexShader:'varying vec3 d;void main(){d=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:`varying vec3 d;uniform float space;
 void main(){vec3 n=normalize(d);float h=max(n.y,0.);vec3 c=mix(vec3(.40,.53,.54),vec3(.045,.19,.34),smoothstep(0.,.36,h));float streak=sin(n.x*22.+n.y*83.+sin(n.x*9.+n.z*11.)*2.)*.5+.5;c+=vec3(.08,.071,.059)*pow(streak,4.)*smoothstep(.003,.07,h)*(1.-smoothstep(.13,.39,h));
@@ -179,4 +169,4 @@ function draw(now){
  renderer.render(scene,camera);
 }
 function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}
-resize();window.addEventListener('resize',resize);boostReady.then(()=>{last=performance.now();renderer.setAnimationLoop(draw);}).catch(error=>{document.querySelector('#caption').textContent='助推器模型加载失败，请刷新重试。';console.error(error);});
+resize();window.addEventListener('resize',resize);modelsReady.then(()=>{last=performance.now();renderer.setAnimationLoop(draw);}).catch(error=>{document.querySelector('#caption').textContent='飞行器模型加载失败，请刷新重试。';console.error(error);});
